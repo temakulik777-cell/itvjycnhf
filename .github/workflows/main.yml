@@ -1,0 +1,57 @@
+name: Build Internal Source (17.zip)
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Unzip 17.zip
+      run: |
+        unzip 17.zip -d project_files
+        echo "=== Ищем файлы конфигурации ==="
+        find project_files -name "build" -type f
+        find project_files -name "Android.mk" -type f
+
+    - name: Setup Android NDK
+      uses: nttld/setup-ndk@v1
+      with:
+        ndk-version: r25c
+
+    - name: Build with ndk-build
+      run: |
+        # Ищем путь к папке, где лежит папка Jni
+        ANDROID_DIR=$(find project_files -type d -name "Jni" | xargs dirname | head -n 1)
+        cd "$ANDROID_DIR"
+        
+        # Ищем файл сборки (может называться build или Android.mk)
+        # Ищем именно файл (-type f), чтобы не наткнуться на папку
+        BUILD_SCRIPT=$(find . -maxdepth 2 -name "build" -type f | head -n 1)
+        
+        if [ -z "$BUILD_SCRIPT" ]; then
+          BUILD_SCRIPT=$(find . -maxdepth 2 -name "Android.mk" -type f | head -n 1)
+        fi
+
+        if [ -z "$BUILD_SCRIPT" ]; then
+          echo "Ошибка: Не найден файл сборки (ни build, ни Android.mk)!"
+          exit 1
+        fi
+
+        echo "Сборка в папке: $(pwd)"
+        echo "Используем файл сборки: $BUILD_SCRIPT"
+        
+        # Запускаем сборку с указанием конкретного файла
+        ndk-build NDK_PROJECT_PATH=. APP_BUILD_SCRIPT="$BUILD_SCRIPT" APP_ABI="arm64-v8a"
+
+    - name: Upload Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: Compiled-Internal-Lib-17
+        path: "**/libs/arm64-v8a/*.so"
